@@ -1,0 +1,131 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AI-Powered Document Summarization Application using DeepSeek-R1 on Amazon Bedrock
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket for document uploads
+    Default: ai-document-summarization-bucket
+
+  TopicName:
+    Type: String
+    Description: Name of the SNS topic for notifications
+    Default: ai-document-summary-notifications
+
+  ModelId:
+    Type: String
+    Description: Amazon Bedrock model ID for document summarization
+    Default: anthropic.claude-3-7-sonnet-20250219-v1:0
+    
+  InferenceProfile:
+    Type: String
+    Description: Amazon Bedrock inference profile name or ARN
+    Default: ""
+
+Resources:
+  # S3 Bucket for document uploads
+  DocumentBucket:
+    Type: AWS::S3::Bucket
+    DependsOn:
+      - DocumentProcessorPermission
+    Properties:
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .pdf
+            Function: !GetAtt DocumentProcessorFunction.Arn
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .txt
+            Function: !GetAtt DocumentProcessorFunction.Arn
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .docx
+            Function: !GetAtt DocumentProcessorFunction.Arn
+
+  # Lambda permission for S3 to invoke the function
+  DocumentProcessorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref DocumentProcessorFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+
+  # DynamoDB table for storing document summaries
+  SummaryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AIDocumentSummaries
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: DocumentId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: DocumentId
+          KeyType: HASH
+
+  # SNS Topic for notifications
+  NotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Ref TopicName
+      DisplayName: AI Document Summary Notifications
+
+  # Lambda function for document processing with AI
+  DocumentProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: document_processor_ai.lambda_handler
+      Runtime: python3.13
+      Timeout: 300
+      MemorySize: 1024
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref SummaryTable
+          TOPIC_ARN: !Ref NotificationTopic
+          MODEL_ID: !Ref ModelId
+          INFERENCE_PROFILE: !Ref InferenceProfile
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref BucketName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SummaryTable
+        - SNSPublishMessagePolicy:
+            TopicName: !GetAtt NotificationTopic.TopicName
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+
+Outputs:
+  BucketName:
+    Description: S3 bucket for document uploads
+    Value: !Ref DocumentBucket
+  
+  TableName:
+    Description: DynamoDB table for AI document summaries
+    Value: !Ref SummaryTable
+  
+  TopicARN:
+    Description: SNS topic ARN for notifications
+    Value: !Ref NotificationTopic
+  
+  FunctionName:
+    Description: Lambda function for AI document processing
+    Value: !Ref DocumentProcessorFunction

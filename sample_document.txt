@@ -1,0 +1,21 @@
+# Sample Document for AI Summarization
+
+## Introduction
+This is a sample document to test the AI-powered document summarization application using DeepSeek-R1 on Amazon Bedrock.
+
+## Key Points
+1. The application uses serverless architecture on AWS
+2. Documents are uploaded to an S3 bucket
+3. A Lambda function processes the documents
+4. DeepSeek-R1 on Amazon Bedrock generates intelligent summaries
+5. Summaries are stored in DynamoDB
+6. Notifications are sent via SNS
+
+## Benefits
+- Automated document processing
+- High-quality AI-generated summaries
+- Scalable serverless architecture
+- Real-time notifications
+
+## Conclusion
+This sample demonstrates how AI can be used to extract meaningful insights from documents automatically.
